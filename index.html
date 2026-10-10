@@ -1,153 +1,148 @@
 <!doctype html>
-<!-- Страница для получателя ссылки на прогулку. Выложена на GitHub Pages из отдельного публичного
-     репозитория MICHAel-plstv/iwashere (см. README → «Шеринг по ссылке»). Данные берёт из публичного
-     бакета Supabase: <папка>/walk.json и фото рядом, папка — параметр ?w= -->
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>I Was Here</title>
-    <!-- Превью ссылки в мессенджерах: они не запускают JS, поэтому текст общий -->
-    <meta property="og:title" content="I Was Here" />
-    <meta property="og:description" content="Маршрут прогулки с фото · A walk route with photos" />
-    <meta name="robots" content="noindex" />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
-      crossorigin=""
-    />
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
-      crossorigin=""
-    ></script>
-    <style>
-      html,
-      body {
-        height: 100%;
-        margin: 0;
-        font: 16px -apple-system, system-ui, sans-serif;
-        background: #fff;
-      }
-      #map {
-        position: fixed;
-        inset: 0;
-      }
-      .card {
-        position: fixed;
-        top: max(12px, env(safe-area-inset-top));
-        left: 12px;
-        right: 12px;
-        z-index: 1000;
-        padding: 12px 16px;
-        border-radius: 16px;
-        background: rgba(255, 255, 255, 0.95);
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-      }
-      h1 {
-        margin: 0;
-        font-size: 20px;
-      }
-      #stats {
-        margin: 4px 0 0;
-        color: #3c3c43;
-        font-variant-numeric: tabular-nums;
-      }
-      .thumb img {
-        width: 44px;
-        height: 44px;
-        object-fit: cover;
-        border: 2px solid #fff;
-        border-radius: 8px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-        cursor: pointer;
-      }
-      #viewer {
-        position: fixed;
-        inset: 0;
-        z-index: 2000;
-        background: #000;
-        cursor: zoom-out;
-      }
-      #viewer img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
-    <div class="card">
-      <h1>I Was Here</h1>
-      <p id="stats"></p>
-    </div>
-    <div id="viewer" hidden><img alt="" /></div>
-    <script>
-      const STORAGE = 'https://uleosaojlnrpkapbecsv.supabase.co/storage/v1/object/public/walks/';
-      const ru = navigator.language.startsWith('ru');
-      document.documentElement.lang = ru ? 'ru' : 'en';
 
-      const stats = document.getElementById('stats');
-      const card = document.querySelector('.card');
-      // Фото поверх окна, а где браузер умеет (компьютер, Android, iPad) — ещё и на весь экран без панелей.
-      // Safari на iPhone полноэкранный режим даёт только видео, там остаётся слой на всё окно
-      const viewer = document.getElementById('viewer');
-      const openPhoto = (src) => {
-        viewer.firstElementChild.src = src;
-        viewer.hidden = false;
-        viewer.requestFullscreen?.().catch(() => {});
-      };
-      viewer.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : (viewer.hidden = true));
-      // Выход из полноэкранного режима (нажатие или Esc) закрывает и фото
-      document.onfullscreenchange = () => {
-        if (!document.fullscreenElement) viewer.hidden = true;
-      };
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>I Was Here</title>
+  <meta property="og:title" content="I Was Here" />
+  <meta property="og:description" content="Маршрут прогулки или поездки с фото · A walk or trip route with photos" />
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin=""></script>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font: 16px -apple-system, system-ui, sans-serif;
+      background: #fff;
+    }
 
-      const map = L.map('map', { zoomControl: false });
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+    #map {
+      position: fixed;
+      inset: 0;
+    }
 
-      // Папка прогулки — <id пользователя>/<32 hex>. Ничего другого в адрес запроса не пускаем
-      const folder = new URLSearchParams(location.search).get('w') ?? '';
-      const base = STORAGE + folder + '/';
+    .card {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: 12px;
+      right: 12px;
+      z-index: 1000;
+      padding: 12px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    }
 
-      const notFound = () => {
-        stats.textContent = ru
-          ? 'Маршрут не найден: ссылка неверная или маршрут удалили.'
-          : 'Route not found: the link is wrong or the route was deleted.';
-        map.setView([30, 0], 2);
-      };
+    h1 {
+      margin: 0;
+      font-size: 20px;
+    }
 
-      // Миниатюра — то же фото целиком, по нажатию оно открывается на весь экран
-      const addPhoto = ({ file, lat, lng }) => {
-        const img = document.createElement('img');
-        img.src = base + encodeURIComponent(file);
-        img.alt = '';
-        img.onclick = () => openPhoto(img.src);
-        L.marker([lat, lng], { icon: L.divIcon({ html: img, className: 'thumb', iconSize: [48, 48] }) }).addTo(map);
-      };
+    #stats {
+      margin: 4px 0 0;
+      color: #3c3c43;
+      font-variant-numeric: tabular-nums;
+    }
 
-      const show = (walk) => {
-        stats.textContent = walk.stats;
-        const line = L.polyline(walk.route, { color: walk.color, weight: 5 }).addTo(map);
-        // Сверху маршрут не должен уйти под карточку с цифрами
-        map.fitBounds(line.getBounds(), { paddingTopLeft: [40, card.offsetHeight + 40], paddingBottomRight: [40, 40] });
-        walk.photos.forEach(addPhoto);
-      };
+    .thumb img {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      border: 2px solid #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+    }
 
-      if (!/^[0-9a-f-]{36}\/[0-9a-f]{32}$/.test(folder)) notFound();
-      else
-        fetch(base + 'walk.json')
-          .then((res) => {
-            if (!res.ok) throw new Error(res.status);
-            return res.json();
-          })
-          .then(show)
-          .catch(notFound);
-    </script>
-  </body>
+    #viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: #000;
+      cursor: zoom-out;
+    }
+
+    #viewer img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+  <div class="card">
+    <h1>I Was Here</h1>
+    <p id="stats"></p>
+  </div>
+  <div id="viewer" hidden><img alt="" /></div>
+  <script>
+    const STORAGE = 'https://uleosaojlnrpkapbecsv.supabase.co/storage/v1/object/public/walks/';
+    const ru = navigator.language.startsWith('ru');
+    document.documentElement.lang = ru ? 'ru' : 'en';
+
+    const stats = document.getElementById('stats');
+    const card = document.querySelector('.card');
+    const viewer = document.getElementById('viewer');
+    const openPhoto = (src) => {
+      viewer.firstElementChild.src = src;
+      viewer.hidden = false;
+      viewer.requestFullscreen?.().catch(() => { });
+    };
+    viewer.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : (viewer.hidden = true));
+    document.onfullscreenchange = () => {
+      if (!document.fullscreenElement) viewer.hidden = true;
+    };
+
+    const map = L.map('map', { zoomControl: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    const folder = new URLSearchParams(location.search).get('w') ?? '';
+    const base = STORAGE + folder + '/';
+
+    const notFound = () => {
+      stats.textContent = ru
+        ? 'Маршрут не найден: ссылка неверная или маршрут удалили.'
+        : 'Route not found: the link is wrong or the route was deleted.';
+      map.setView([30, 0], 2);
+    };
+
+    const addPhoto = ({ file, lat, lng }) => {
+      const img = document.createElement('img');
+      img.src = base + encodeURIComponent(file);
+      img.alt = '';
+      img.onclick = () => openPhoto(img.src);
+      L.marker([lat, lng], { icon: L.divIcon({ html: img, className: 'thumb', iconSize: [48, 48] }) }).addTo(map);
+    };
+
+    const show = (data) => {
+      if (data.name) card.firstElementChild.textContent = document.title = data.name;
+      stats.textContent = data.stats;
+      const walks = data.walks ?? [data];
+      const lines = L.featureGroup(walks.map((walk) => L.polyline(walk.route, { color: walk.color, weight: 5 }))).addTo(map);
+      map.fitBounds(lines.getBounds(), { paddingTopLeft: [40, card.offsetHeight + 40], paddingBottomRight: [40, 40] });
+      walks.forEach((walk) => walk.photos.forEach(addPhoto));
+    };
+
+    if (!/^[0-9a-f-]{36}\/[0-9a-f]{32}$/.test(folder)) notFound();
+    else
+      fetch(base + 'walk.json')
+        .then((res) => {
+          if (!res.ok) throw new Error(res.status);
+          return res.json();
+        })
+        .then(show)
+        .catch(notFound);
+  </script>
+</body>
+
 </html>
