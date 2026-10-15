@@ -124,11 +124,88 @@
       L.marker([lat, lng], { icon: L.divIcon({ html: img, className: 'thumb', iconSize: [48, 48] }) }).addTo(map);
     };
 
+    const ROUTE_STEP_M = 5;
+    const ROUTE_GAP_M = 40;
+    const ROUTE_SMOOTH_STEPS = 3;
+    const ROUTE_FADE_STEPS = 16;
+    const ROUTE_FADE_WHITE = 0.6;
+
+    const meters = (a, b) => L.latLng(a).distanceTo(b);
+    const lerp = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+
+    const resample = (part) => {
+      const out = [part[0]];
+      let carry = 0;
+      for (let i = 1; i < part.length; i++) {
+        const length = meters(part[i - 1], part[i]);
+        let at = ROUTE_STEP_M - carry;
+        for (; at <= length; at += ROUTE_STEP_M) out.push(lerp(part[i - 1], part[i], at / length));
+        carry = length - at + ROUTE_STEP_M;
+      }
+      if (part.length > 1) out.push(part[part.length - 1]);
+      return out;
+    };
+
+    const smooth = (points) =>
+      points.map((_, i) => {
+        const k = Math.min(ROUTE_SMOOTH_STEPS, i, points.length - 1 - i);
+        const window = points.slice(i - k, i + k + 1);
+        return [0, 1].map((axis) => window.reduce((sum, p) => sum + p[axis], 0) / window.length);
+      });
+
+    const routeLines = (route) => {
+      const parts = [];
+      route.forEach((point, i) => {
+        if (i === 0 || meters(route[i - 1], point) > ROUTE_GAP_M) parts.push([]);
+        parts[parts.length - 1].push(point);
+      });
+      return {
+        lines: parts.map((part) => smooth(resample(part))),
+        gaps: parts.slice(1).map((part, i) => [parts[i][parts[i].length - 1], part[0]]),
+      };
+    };
+
+    const whiten = (hex, share) =>
+      '#' +
+      [1, 3, 5]
+        .map((i) => parseInt(hex.slice(i, i + 2), 16))
+        .map((c) => Math.round(c + (255 - c) * share).toString(16).padStart(2, '0'))
+        .join('');
+
+    const routeGradient = (color, count) =>
+      Array.from({ length: count }, (_, i) => {
+        const step = Math.round((i / Math.max(count - 1, 1)) * (ROUTE_FADE_STEPS - 1));
+        return whiten(color, ROUTE_FADE_WHITE * (1 - step / (ROUTE_FADE_STEPS - 1)));
+      });
+
+    const drawWalk = (walk, group) => {
+      const { lines, gaps } = routeLines(walk.route);
+      const colors = routeGradient(walk.color, lines.flat().length);
+      let start = 0;
+      lines.forEach((line, i) => {
+        const shades = colors.slice(start, (start += line.length));
+        if (gaps[i]) group.addLayer(L.polyline(gaps[i], { color: shades.at(-1), weight: 2, dashArray: '6 8' }));
+        if (line.length < 2) return;
+        let from = 0;
+        shades.forEach((color, j) => {
+          if (j < shades.length - 1 && shades[j + 1] === color) return;
+          group.addLayer(L.polyline(line.slice(from, j + 2), { color, weight: 4, lineCap: 'round', lineJoin: 'round' }));
+          from = j + 1;
+        });
+      });
+      if (walk.route.length > 0) {
+        group.addLayer(
+          L.circleMarker(walk.route[0], { radius: 5, weight: 2, color: walk.color, fillColor: '#fff', fillOpacity: 1 }),
+        );
+      }
+    };
+
     const show = (data) => {
       if (data.name) card.firstElementChild.textContent = document.title = data.name;
       stats.textContent = data.stats;
       const walks = data.walks ?? [data];
-      const lines = L.featureGroup(walks.map((walk) => L.polyline(walk.route, { color: walk.color, weight: 5 }))).addTo(map);
+      const lines = L.featureGroup().addTo(map);
+      walks.forEach((walk) => drawWalk(walk, lines));
       map.fitBounds(lines.getBounds(), { paddingTopLeft: [40, card.offsetHeight + 40], paddingBottomRight: [40, 40] });
       walks.forEach((walk) => walk.photos.forEach(addPhoto));
     };
