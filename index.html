@@ -59,6 +59,18 @@
       cursor: pointer;
     }
 
+    .place {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: #ff9500;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      font-size: 14px;
+    }
+
     #viewer {
       position: fixed;
       inset: 0;
@@ -123,6 +135,13 @@
       img.onclick = () => openPhoto(img.src);
       L.marker([lat, lng], { icon: L.divIcon({ html: img, className: 'thumb', iconSize: [48, 48] }) }).addTo(map);
     };
+
+    const PLACE_EMOJI = { home: '🏠', hotel: '🛏', work: '💼', cafe: '☕', other: '📍' };
+
+    const placeMarker = ({ kind, latitude, longitude }) =>
+      L.marker([latitude, longitude], {
+        icon: L.divIcon({ html: PLACE_EMOJI[kind] ?? PLACE_EMOJI.other, className: 'place', iconSize: [28, 28] }),
+      });
 
     const ROUTE_STEP_M = 5;
     const ROUTE_GAP_M = 40;
@@ -206,6 +225,7 @@
       const walks = data.walks ?? [data];
       const lines = L.featureGroup().addTo(map);
       walks.forEach((walk) => drawWalk(walk, lines));
+      (data.places ?? []).forEach((place) => lines.addLayer(placeMarker(place)));
       map.fitBounds(lines.getBounds(), { paddingTopLeft: [40, card.offsetHeight + 40], paddingBottomRight: [40, 40] });
       walks.forEach((walk) => walk.photos.forEach(addPhoto));
     };
